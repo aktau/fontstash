@@ -23,6 +23,9 @@ LIBS = -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework Co
 test: $(OBJS) $(DEPS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS)
 
+mio: mio_main.o mio_cache.o mio_rune.o mio_zip.o mio_shader.o mio_util.h mio_stash.h
+	$(CC) $(CFLAGS) -o mio mio_main.o mio_cache.o mio_rune.o mio_zip.o mio_shader.o $(LIBS)
+
 analyze: clean
 	$(eval SCAN_DIR := $(shell $(SCAN_BUILD) --use-analyzer=$(ANALYZER) make test 2>&1 | grep -Po "(?<='scan-view ).*(?=')|No bugs found"))
 ifneq (,$(findstring 'found',"$(SCAN_DIR)"))
@@ -33,6 +36,6 @@ else
 endif
 
 clean:
-	rm -rf test $(OBJS)
+	rm -rf mio test *.o
 
 .PHONY: analyze clean

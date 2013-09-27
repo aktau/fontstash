@@ -478,6 +478,9 @@ static void text_flush(void) {
 void text_end(void) {
     text_flush();
 
+    printf("text_end: encountered %d collisions\n", debug_collisions);
+    debug_collisions = 0;
+
     glDisable(GL_BLEND);
 }
 
@@ -572,6 +575,7 @@ float text_width(char *str) {
     return font_width_imp(text_font, text_scale, str);
 }
 
-// void text_debug(float x, float y, int w, int h) {
-
-// }
+void text_debug(float x, float y, int w, int h) {
+    /* draw a quad/rect at z = 0 */
+    add_rect(x, y, x + w, y + h, 0, 0, 1, 1);
+}

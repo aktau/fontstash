@@ -5,7 +5,9 @@
 *.exe
 *.o
 *.so
+
 test
+mio
 
 ## Logs and databases #
 *.log

@@ -51,7 +51,7 @@ int main()
 		return -1;
 
 	mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-    window = glfwCreateWindow(640, 480, "Font Stash", NULL, NULL);
+    window = glfwCreateWindow(mode->width - 40, mode->height - 80, "Font Stash", NULL, NULL);
 	if (!window)
 	{
 		glfwTerminate();
@@ -113,7 +113,6 @@ int main()
 		glLoadIdentity();
 		glDisable(GL_DEPTH_TEST);
 		glColor4ub(255,255,255,255);
-		// glDisable(GL_BLEND);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 
@@ -128,7 +127,7 @@ int main()
 
 		dash(dx,dy);
 
-		struct fontstash_style styleBig = { FONT_NORMAL, 220.0f, white };
+		struct fontstash_style styleBig = { FONT_NORMAL, 124.0f, white };
 		struct fontstash_style styleBrown = { FONT_ITALIC, 48.0f, brown };
 		struct fontstash_style styleN24 = { FONT_NORMAL, 24.0f, white };
 		struct fontstash_style styleI24 = { FONT_ITALIC, 24.0f, white };

@@ -35,6 +35,10 @@
 
 #define CLEAR_COLOR CLEAR_R, CLEAR_G, CLEAR_B, CLEAR_A
 
+#define WHITE 1.0f, 1.0f, 1.0f
+#define BROWN 192.f / 255.f, 128.f / 255.f, 0
+#define BLUE 0.f, 128.f / 255.f, 1.0f
+
 static float xtranslate = 0.0f;
 static float ytranslate = 0.0f;
 static int alt          = 0;
@@ -107,17 +111,21 @@ static void render_grid(struct font *font, float color, int width, int height) {
 static void render_text(struct font *font, mat4 clip_from_view, mat4 view_from_world, float scale, float color, int width, int height, int alt, float xoffset, float yoffset) {
     text_begin(clip_from_view, view_from_world, alt);
     text_set_color(color, color, color, 1);
-    text_set_font(font, floorf(200.0f * scale));
+    text_set_font(font, floorf(124.0f * scale));
 
-    text_show(100 + xoffset, 300 + yoffset, "The quick brown fox");
+    text_show(10 + xoffset, 256 + 70 + yoffset, "The quick brown fox");
 
-    render_grid(font, color, width, height);
+    // render_grid(font, color, width, height);
+
+    /* render at half size */
+    text_debug(0, 0, 512, 512);
 
     text_end();
 }
 
 int main() {
-    int width = 640, height = 480;
+    // 1024×576
+    int width = 1024, height = 576;
 
     enum {
         FONT_NORMAL = 0,
@@ -149,7 +157,10 @@ int main() {
 
     glfwMakeContextCurrent(window);
 
-    struct font *font = load_font("fonts/DroidSerif-Regular.ttf");
+    struct font *font   = load_font("fonts/DroidSerif-Regular.ttf");
+    struct font *italic = load_font("fonts/DroidSerif-Italic.ttf");
+    struct font *bold   = load_font("fonts/DroidSerif-Bold.ttf");
+    struct font *jp     = load_font("fonts/DroidSansJapanese.ttf");
 
     // glEnable(GL_MULTISAMPLE);
     // glEnable(GL_FRAMEBUFFER_SRGB);
@@ -193,7 +204,88 @@ int main() {
 
         dx = sx; dy = sy;
 
-        render_text(font, clip_from_view, view_from_world, scale, 1.0f, width, height, alt, 0, 0);
+        float color = 1.0f;
+
+        text_begin(clip_from_view, view_from_world, 0);
+        text_set_color(WHITE, 1);
+        text_set_font(font, 124.0f);
+        text_show(10, 320 + 70, "The quick");
+
+        text_set_color(BROWN, 1);
+        text_set_font(italic, 48.0f);
+        text_show(10 + 510, 320 + 70, "brown ");
+
+        text_set_color(WHITE, 1);
+        text_set_font(font, 24.0f);
+        text_show(10 + 640, 320 + 70, "fox ");
+
+        text_set_font(italic, 24.0f);
+        text_show(10, 320 + 100, "jumps over ");
+        text_set_font(bold, 24.0f);
+        text_show(10 + 110, 320 + 100, "the lazy ");
+        text_set_font(font, 24.0f);
+        text_show(10 + 200, 320 + 100, "dog.");
+
+        text_set_color(BLUE, 1);
+        text_set_font(font, 12.0f);
+        text_show(10, 320 + 150, "Now is the time for all good men to come to the aid of the party.");
+
+        text_set_color(WHITE, 1);
+        text_set_font(italic, 18.0f);
+        text_show(10, 320 + 180, "Ég get etið gler án þess að meiða mig.");
+
+        text_set_color(WHITE, 1);
+        text_set_font(jp, 18.0f);
+        text_show(10, 320 + 200, "私はガラスを食べられます。それは私を傷つけません。");
+
+        // struct fontstash_style styleBig = { FONT_NORMAL, 124.0f, white };
+        // struct fontstash_style styleBrown = { FONT_ITALIC, 48.0f, brown };
+        // struct fontstash_style styleN24 = { FONT_NORMAL, 24.0f, white };
+        // struct fontstash_style styleI24 = { FONT_ITALIC, 24.0f, white };
+        // struct fontstash_style styleB24 = { FONT_BOLD, 24.0f, white };
+        // struct fontstash_style styleN12Blue = { FONT_NORMAL, 12.0f, blue };
+        // struct fontstash_style styleI18 = { FONT_ITALIC, 18.0f, white };
+        // struct fontstash_style styleJp = { FONT_JAPANESE, 18.0f, white };
+
+        // fontstash_vert_metrics(stash, styleBig, NULL, NULL, &lh);
+        // dx = sx;
+        // dy += lh;
+        // dash(dx,dy);
+        // fontstash_draw_text(stash, styleBig, dx,dy,"The quick ",&dx);
+        // fontstash_draw_text(stash, styleBrown, dx,dy,"brown ",&dx);
+        // fontstash_draw_text(stash, styleN24, dx,dy,"fox ",&dx);
+
+        // fontstash_vert_metrics(stash, styleN24, NULL, NULL, &lh);
+        // dx = sx;
+        // dy += lh*1.2f;
+        // dash(dx,dy);
+        // fontstash_draw_text(stash, styleI24, dx,dy,"jumps over ",&dx);
+        // fontstash_draw_text(stash, styleB24, dx,dy,"the lazy ",&dx);
+        // fontstash_draw_text(stash, styleN24, dx,dy,"dog.",&dx);
+
+        // dx = sx;
+        // dy += lh*1.2f;
+        // dash(dx,dy);
+        // fontstash_draw_text(stash, styleN12Blue, dx,dy,"Now is the time for all good men to come to the aid of the party.",&dx);
+
+        // fontstash_vert_metrics(stash, styleN12Blue, NULL,NULL,&lh);
+        // dx = sx;
+        // dy += lh*1.2f*2;
+        // dash(dx,dy);
+        // fontstash_draw_text(stash, styleI18, dx,dy,"Ég get etið gler án þess að meiða mig.",&dx);
+
+        // fontstash_vert_metrics(stash, styleI18, NULL,NULL,&lh);
+        // dx = sx;
+        // dy += lh*1.2f;
+        // dash(dx,dy);
+        // fontstash_draw_text(stash, styleJp, dx,dy,"私はガラスを食べられます。それは私を傷つけません。",&dx);
+
+        /* render at half size */
+        text_debug(0, 0, 512, 512);
+
+        text_end();
+
+        // render_text(font, clip_from_view, view_from_world, scale, 1.0f, width, height, alt, 0, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
