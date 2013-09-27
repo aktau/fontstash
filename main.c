@@ -51,7 +51,7 @@ int main()
 		return -1;
 
 	mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-    window = glfwCreateWindow(mode->width - 40, mode->height - 80, "Font Stash", NULL, NULL);
+    window = glfwCreateWindow(640, 480, "Font Stash", NULL, NULL);
 	if (!window)
 	{
 		glfwTerminate();
@@ -80,17 +80,17 @@ int main()
 	{
 		printf("Could not add font.\n");
 		return -1;
-	}	
+	}
 	if (!fontstash_add_font(stash, FONT_BOLD, "fonts/DroidSerif-Bold.ttf"))
 	{
 		printf("Could not add font.\n");
 		return -1;
-	}	
+	}
 	if (!fontstash_add_font(stash, FONT_JAPANESE, "fonts/DroidSansJapanese.ttf"))
 	{
 		printf("Could not add font.\n");
 		return -1;
-	}	
+	}
 
 
 	while (!glfwWindowShouldClose(window))
@@ -113,6 +113,7 @@ int main()
 		glLoadIdentity();
 		glDisable(GL_DEPTH_TEST);
 		glColor4ub(255,255,255,255);
+		// glDisable(GL_BLEND);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 
@@ -122,12 +123,12 @@ int main()
 		unsigned int blue = glrgba(0,192,255,255);
 
 		sx = 100; sy = 100;
-		
+
 		dx = sx; dy = sy;
 
 		dash(dx,dy);
 
-		struct fontstash_style styleBig = { FONT_NORMAL, 124.0f, white };
+		struct fontstash_style styleBig = { FONT_NORMAL, 220.0f, white };
 		struct fontstash_style styleBrown = { FONT_ITALIC, 48.0f, brown };
 		struct fontstash_style styleN24 = { FONT_NORMAL, 24.0f, white };
 		struct fontstash_style styleI24 = { FONT_ITALIC, 24.0f, white };
@@ -172,7 +173,7 @@ int main()
 
 		glstash_draw(gl, stash);
 
-		
+
 		glEnable(GL_DEPTH_TEST);
 
 		glfwSwapBuffers(window);
