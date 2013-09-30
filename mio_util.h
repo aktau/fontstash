@@ -14,11 +14,25 @@
 #define strlcpy xstrlcpy
 #define strlcat xstrlcat
 
+#define GAMMA 2.2f
+#define INV_GAMMA (1.0f / GAMMA)
+
+/**
+ *  sRGB to linear ~= x^2
+ *  linear to sRGB ~= x^(1/2)
+ */
 #define SLUM(x) ((x)*(x)) /* approximate sRGB to Linear conversion */
 #define SRGB(r,g,b) SLUM(r),SLUM(g),SLUM(b)
 #define SRGBA(r,g,b,a) SRGB(r,g,b),(a)
 #define LRGB(r,g,b) sqrtf(r),sqrtf(g),sqrtf(b)
 #define LRGBA(r,g,b,a) LRGB(r,g,b),(a)
+
+#define ACC_SLUM(x) (pow((x), GAMMA)) /* approximate sRGB to Linear conversion */
+#define ACC_SRGB(r,g,b) ACC_SLUM(r), ACC_SLUM(g), ACC_SLUM(b)
+#define ACC_SRGBA(r,g,b,a) ACC_SRGB(r,g,b),(a)
+#define ACC_LSUM(x) powf((x), INV_GAMMA)
+#define ACC_LRGB(r,g,b) ACC_LSUM(r), ACC_LSUM(g), ACC_LSUM(b)
+#define ACC_LRGBA(r,g,b,a) ACC_LRGB(r,g,b),(a)
 
 typedef float mat4[16];
 

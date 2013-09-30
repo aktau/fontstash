@@ -69,10 +69,10 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
                 srgb = !srgb;
                 printf("srgb is now %d\n", srgb);
                 if (srgb) {
-                    printf("clear specified as linearRGB(%3.2f, %3.2f, %3.2f, %3.2f), will become sRGB(%3.2f, %3.2f, %3.2f, %3.2f)\n", CLEAR_COLOR, SRGBA(CLEAR_R, CLEAR_G, CLEAR_B, CLEAR_A));
+                    printf("clear specified as linearRGB(%3.2f, %3.2f, %3.2f, %3.2f), will become sRGB(%3.2f, %3.2f, %3.2f, %3.2f)\n", CLEAR_COLOR, ACC_SRGBA(CLEAR_R, CLEAR_G, CLEAR_B, CLEAR_A));
                 }
                 else {
-                    printf("clear specified as sRGB(%3.2f, %3.2f, %3.2f, %3.2f), should be linearized lRGB(%3.2f, %3.2f, %3.2f, %3.2f)\n", CLEAR_COLOR, LRGBA(CLEAR_R, CLEAR_G, CLEAR_B, CLEAR_A));
+                    printf("clear specified as sRGB(%3.2f, %3.2f, %3.2f, %3.2f), should be linearized lRGB(%3.2f, %3.2f, %3.2f, %3.2f)\n", CLEAR_COLOR, ACC_LRGBA(CLEAR_R, CLEAR_G, CLEAR_B, CLEAR_A));
                 }
                 if (srgb) glEnable(GL_FRAMEBUFFER_SRGB);
                 else glDisable(GL_FRAMEBUFFER_SRGB);
@@ -190,8 +190,8 @@ int main() {
         mat4 clip_from_view = {
            2.f / (float) width, 0, 0, 0,
            0, -2.f / (float) height, 0, 0,
-           0, 0, -2.f/(far - near), 0,
-           -1, 1, -(far + near)/(far - near), 1
+           0, 0, 1.f, 0,
+           -1, 1, 0.f, 1
         };
 
         /* modelview matrix */
@@ -238,49 +238,30 @@ int main() {
         text_set_font(jp, 18.0f);
         text_show(10, 320 + 200, "私はガラスを食べられます。それは私を傷つけません。");
 
-        // struct fontstash_style styleBig = { FONT_NORMAL, 124.0f, white };
-        // struct fontstash_style styleBrown = { FONT_ITALIC, 48.0f, brown };
-        // struct fontstash_style styleN24 = { FONT_NORMAL, 24.0f, white };
-        // struct fontstash_style styleI24 = { FONT_ITALIC, 24.0f, white };
-        // struct fontstash_style styleB24 = { FONT_BOLD, 24.0f, white };
-        // struct fontstash_style styleN12Blue = { FONT_NORMAL, 12.0f, blue };
-        // struct fontstash_style styleI18 = { FONT_ITALIC, 18.0f, white };
-        // struct fontstash_style styleJp = { FONT_JAPANESE, 18.0f, white };
+        const int COLORS = 50;
+        const float SCALE = 124.0f;
+        text_set_font(font, SCALE);
 
-        // fontstash_vert_metrics(stash, styleBig, NULL, NULL, &lh);
-        // dx = sx;
-        // dy += lh;
-        // dash(dx,dy);
-        // fontstash_draw_text(stash, styleBig, dx,dy,"The quick ",&dx);
-        // fontstash_draw_text(stash, styleBrown, dx,dy,"brown ",&dx);
-        // fontstash_draw_text(stash, styleN24, dx,dy,"fox ",&dx);
+        // glEnable(GL_FRAMEBUFFER_SRGB);
+        for (int i = 0; i <= COLORS; ++i) {
+            const float c = ((float)i / (float) COLORS);
+            text_set_color(c, c, c, 1.f);
+            text_show(400 + 5 * i, 400, "|");
+            // printf("printed color: %f\n", c);
+        }
 
-        // fontstash_vert_metrics(stash, styleN24, NULL, NULL, &lh);
-        // dx = sx;
-        // dy += lh*1.2f;
-        // dash(dx,dy);
-        // fontstash_draw_text(stash, styleI24, dx,dy,"jumps over ",&dx);
-        // fontstash_draw_text(stash, styleB24, dx,dy,"the lazy ",&dx);
-        // fontstash_draw_text(stash, styleN24, dx,dy,"dog.",&dx);
+        text_end();
+        text_begin(clip_from_view, view_from_world, 2);
 
-        // dx = sx;
-        // dy += lh*1.2f;
-        // dash(dx,dy);
-        // fontstash_draw_text(stash, styleN12Blue, dx,dy,"Now is the time for all good men to come to the aid of the party.",&dx);
+        // glDisable(GL_FRAMEBUFFER_SRGB);
+        for (int i = 0; i <= COLORS; ++i) {
+            const float c = ((float)i / (float) COLORS);
+            text_set_color(c, c, c, 1.f);
+            text_show(400 + 5 * i, 510, "|");
+            // printf("printed color: %f\n", c);
+        }
 
-        // fontstash_vert_metrics(stash, styleN12Blue, NULL,NULL,&lh);
-        // dx = sx;
-        // dy += lh*1.2f*2;
-        // dash(dx,dy);
-        // fontstash_draw_text(stash, styleI18, dx,dy,"Ég get etið gler án þess að meiða mig.",&dx);
-
-        // fontstash_vert_metrics(stash, styleI18, NULL,NULL,&lh);
-        // dx = sx;
-        // dy += lh*1.2f;
-        // dash(dx,dy);
-        // fontstash_draw_text(stash, styleJp, dx,dy,"私はガラスを食べられます。それは私を傷つけません。",&dx);
-
-        /* render at half size */
+        /* render the generated texture map (see the binning) */
         text_debug(0, 0, 512, 512);
 
         text_end();

@@ -234,9 +234,9 @@ static unsigned int lookup_table(struct key *key) {
             return pos;
 
         ++debug_collisions;
-        printf("collision at glyph pos %u, load: %d/%d (%3.1f%%):\n", pos, table_load, MAXGLYPHS, ((float)table_load / (float)MAXGLYPHS) * 100.0f);
-        printf("\tin use by:     font = %p, glyph id = %d, size = %d, subx = %d, suby = %d\n", table[pos].key.font, table[pos].key.gid, table[pos].key.size, table[pos].key.subx, table[pos].key.suby);
-        printf("\twant to place: font = %p, glyph id = %d, size = %d, subx = %d, suby = %d\n", key->font, key->gid, key->size, key->subx, key->suby);
+        // printf("collision at glyph pos %u, load: %d/%d (%3.1f%%):\n", pos, table_load, MAXGLYPHS, ((float)table_load / (float)MAXGLYPHS) * 100.0f);
+        // printf("\tin use by:     font = %p, glyph id = %d, size = %d, subx = %d, suby = %d\n", table[pos].key.font, table[pos].key.gid, table[pos].key.size, table[pos].key.subx, table[pos].key.suby);
+        // printf("\twant to place: font = %p, glyph id = %d, size = %d, subx = %d, suby = %d\n", key->font, key->gid, key->size, key->subx, key->suby);
 
         pos = (pos + 1) % MAXGLYPHS;
     }
@@ -353,7 +353,20 @@ static const char *text_frag_src =
     "void main() {\n"
     "   float coverage = texture(map_color, var_texcoord).r;\n"
     "   frag_color = var_color * coverage;\n"
-    // "   frag_color = vec4(var_color.xyz, coverage);\n"
+    "}\n"
+;
+
+static const char *text_frag_gamma_src =
+    "uniform sampler2D map_color;\n"
+    "in vec2 var_texcoord;\n"
+    "in vec4 var_color;\n"
+    "out vec4 frag_color;\n"
+    "const float inv_gamma = 1.0f/2.2f;\n"
+    "void main() {\n"
+    "   float coverage = texture(map_color, var_texcoord).r;\n"
+    "   vec4 linColor = var_color * coverage;\n"
+    "   frag_color = pow(linColor, vec4(inv_gamma));\n"
+    // "   frag_color = vec4(pow(linColor.rgb, vec3(gamma, gamma, gamma)), coverage);\n"
     "}\n"
 ;
 
@@ -400,6 +413,10 @@ void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {
     static int text_uni_clip_from_view = -1;
     static int text_uni_view_from_world = -1;
 
+    static int text_prog_gam = 0;
+    static int text_uni_gam_clip_from_view = -1;
+    static int text_uni_gam_view_from_world = -1;
+
     static int text_prog_alt = 0;
     static int text_uni_alt_clip_from_view = -1;
     static int text_uni_alt_view_from_world = -1;
@@ -411,15 +428,22 @@ void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {
         memset(cache_zero, 0, sizeof cache_zero);
         glGenTextures(1, &cache_tex);
         glBindTexture(GL_TEXTURE_2D, cache_tex);
+
+        /* we assume that we always blit "pixel-perfect", i.e.: one unit in
+         * the texture is one pixel on the screen. Which makes us able to
+         * get away with linear filtering. This requires an orthogonal
+         * matrix constructed with the screens width/height (as is usually
+         * the case). If we're going to sin against this, or magnify
+         * textures without re-rendering them, we better us GL_LINEAR) */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, CACHESIZE, CACHESIZE, 0, GL_RED, GL_UNSIGNED_BYTE, cache_zero);
-        // glTexImage2D(GL_TEXTURE_2D, 0, GL_INTENSITY, CACHESIZE, CACHESIZE, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, cache_zero);
-        // glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, width, height, 0, GL_ALPHA, GL_UNSIGNED_BYTE, 0);
     }
 
     if (!text_prog) {
@@ -428,6 +452,10 @@ void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {
         text_prog = compile_shader(text_vert_src, text_frag_src);
         text_uni_clip_from_view = glGetUniformLocation(text_prog, "clip_from_view");
         text_uni_view_from_world = glGetUniformLocation(text_prog, "view_from_world");
+
+        text_prog_gam = compile_shader(text_vert_src, text_frag_gamma_src);
+        text_uni_gam_clip_from_view = glGetUniformLocation(text_prog_gam, "clip_from_view");
+        text_uni_gam_view_from_world = glGetUniformLocation(text_prog_gam, "view_from_world");
 
         text_prog_alt = compile_shader(text_vert_src, text_frag_alt_src);
         text_uni_alt_clip_from_view = glGetUniformLocation(text_prog_alt, "clip_from_view");
@@ -454,8 +482,10 @@ void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {
 
     glEnable(GL_BLEND);
 
-    if (alt) glUseProgram(text_prog_alt);
-    else glUseProgram(text_prog);
+    if (alt == 0) glUseProgram(text_prog);
+    if (alt == 1) glUseProgram(text_prog_alt);
+    if (alt == 2) glUseProgram(text_prog_gam);
+
     glUniformMatrix4fv(text_uni_clip_from_view, 1, 0, clip_from_view);
     glUniformMatrix4fv(text_uni_view_from_world, 1, 0, view_from_world);
 
@@ -479,7 +509,7 @@ static void text_flush(void) {
 void text_end(void) {
     text_flush();
 
-    printf("text_end: encountered %d collisions\n", debug_collisions);
+    // printf("text_end: encountered %d collisions\n", debug_collisions);
     debug_collisions = 0;
 
     glDisable(GL_BLEND);
