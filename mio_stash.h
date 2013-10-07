@@ -242,6 +242,138 @@ static unsigned int lookup_table(struct key *key) {
     }
 }
 
+#define SKYLINE_BL_PACKER
+#ifdef SKYLINE_BL_PACKER
+
+#define SKYLINE_MAX_NODES 256
+
+/**
+ * struct 2+2+2+2 = 8 bytes, with a 64
+ * bytes cacheline we can fetch 8 of these
+ * in one go. Now we just have to make sure that
+ * the indices are actually close together.
+ */
+struct skyline_node {
+    int16_t next;
+    uint16_t x;
+    uint16_t y;
+    uint16_t width;
+};
+
+static struct skyline_node skyline_nodes[SKYLINE_MAX_NODES];
+
+static int merge() {
+    struct skyline_node *node = &skyline_nodes[0];
+
+    while (node->next != -1) {
+        struct skyline_node next = &skyline_nodes[node->next];
+
+        if (node->y == next->y) {
+            node->width += next->width;
+            node->next   = next->next;
+            next         = &skyline_nodes[node->next];
+        }
+
+        node = next;
+    }
+}
+
+/**
+ * for the node at index, tries to find a height which will
+ * fit the area specified.
+ */
+static int fit(unsigned int index, unsigned int width, unsigned int height) {
+    struct skyline_node *node = &skyline_nodes[index];
+
+    unsigned int x = node->x;
+    unsigned int y = node->y;
+
+    int width_left = width;
+
+    if (x + width > CACHESIZE - PADDING) {
+        return -1;
+    }
+
+    while (width_left > 0 && node->next != -1) {
+        y = MAX(y, node->y);
+
+        if (y + height > CACHESIZE - PADDING) {
+            return -1;
+        }
+
+        width_left -= node->width;
+
+        node = &skyline_nodes[node->next];
+    }
+
+    return y;
+}
+
+/**
+ * returns 1 if the object was packed, 0 if it could not be packed.
+ *
+ * The coordinates are in the x and y parameters if succesful.
+ *
+ * Try to fit the area in every node you have, the node that's able
+ * to accomodate the area and have the lowest "roof", wins. In case of
+ * ties, the node with the smallest width wins.
+ *
+ * A new node is created afterwards and inserted at the position of the
+ * node this area was fit in.
+ */
+static int pack(unsigned int width, unsigned int height, int *x_out, int *y_out) {
+    int index = 0;
+
+    int y;
+
+    int best_index       = -1;
+    uint16_t best_width  = UINT16_MAX;
+    uint16_t best_height = UINT16_MAX;
+
+    /* loop through all nodes */
+    while (index != -1) {
+        y = fit(index, with, height);
+
+        if (y >= 0) {
+            const struct skyline_node *node = &skyline_nodes[index];
+
+            if (y + height < best_height ||
+                (y + height == best_height && node->width < best_width)) {
+                best_index  = index;
+                best_height = y + height;
+                best_width  = node->width;
+                best_y      = y;
+            }
+        }
+
+        index = node->next;
+    }
+
+    if (best_index == -1) {
+        return 0;
+    }
+
+    /* insert new split node at the best index */
+    struct skyline_node = { -1, x, y, width };
+    *x_out = best_x;
+    *y_out = best_height;
+
+    merge();
+
+}
+
+static void packer_init() {
+    for (int i = 0; i < SKYLINE_MAX_NODES; ++i) {
+        skyline_nodes[i].next  = -1;
+        skyline_nodes[i].x     = PADDING;
+        skyline_nodes[i].y     = PADDING;
+        skyline_nodes[i].width = 0;
+    }
+
+    skyline_nodes[0].width = CACHESIZE;
+}
+#endif
+
 static struct glyph *lookup_glyph(struct font *font, float scale, int gid, int subx, int suby) {
     struct key key;
     unsigned int pos;
@@ -366,7 +498,6 @@ static const char *text_frag_gamma_src =
     "   float coverage = texture(map_color, var_texcoord).r;\n"
     "   vec4 linColor = var_color * coverage;\n"
     "   frag_color = pow(linColor, vec4(inv_gamma));\n"
-    // "   frag_color = vec4(pow(linColor.rgb, vec3(gamma, gamma, gamma)), coverage);\n"
     "}\n"
 ;
 
@@ -431,13 +562,14 @@ void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {
 
         /* we assume that we always blit "pixel-perfect", i.e.: one unit in
          * the texture is one pixel on the screen. Which makes us able to
-         * get away with linear filtering. This requires an orthogonal
+         * get away with GL_NEAREST filtering. This requires an orthogonal
          * matrix constructed with the screens width/height (as is usually
          * the case). If we're going to sin against this, or magnify
          * textures without re-rendering them, we better us GL_LINEAR) */
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
