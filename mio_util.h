@@ -10,9 +10,15 @@
 
 #define TAG_FONT 'F'
 
-#define strsep xstrsep
-#define strlcpy xstrlcpy
-#define strlcat xstrlcat
+#ifndef strsep
+    #define strsep xstrsep
+#endif
+#ifndef strlcpy
+    #define strlcpy xstrlcpy
+#endif
+#ifndef strlcat
+    #define strlcat xstrlcat
+#endif
 
 #define GAMMA 2.2f
 #define INV_GAMMA (1.0f / GAMMA)
