@@ -16,11 +16,17 @@
 
 #include <inttypes.h>
 
+#define SKYLINE_BL_PACKER
+
 static void text_flush(void);
 static void clear_glyph_cache(void);
 
 static struct cache *font_cache = NULL;
 static int debug_collisions = 0;
+
+#ifdef SKYLINE_BL_PACKER
+static void packer_init(void);
+#endif
 
 /*
  * TrueType font
@@ -138,9 +144,15 @@ static void clear_glyph_cache(void) {
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, CACHESIZE, CACHESIZE,
         GL_RED, GL_UNSIGNED_BYTE, cache_zero);
 
+#ifdef SKYLINE_BL_PACKER
+    printf("RE-INITIALIZING skyline packer\n");
+    packer_init();
+#else
+    printf("RE-INITIALIZING normal packer\n");
     cache_row_y = PADDING;
     cache_row_x = PADDING;
     cache_row_h = 0;
+#endif
 }
 
 #define FONT_HASH_DJB
@@ -242,8 +254,12 @@ static unsigned int lookup_table(struct key *key) {
     }
 }
 
-#define SKYLINE_BL_PACKER
 #ifdef SKYLINE_BL_PACKER
+
+#ifndef MAX
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#endif
 
 #define SKYLINE_MAX_NODES 256
 
@@ -261,16 +277,67 @@ struct skyline_node {
 };
 
 static struct skyline_node skyline_nodes[SKYLINE_MAX_NODES];
+int first_node_index = 0;
 
-static int merge() {
-    struct skyline_node *node = &skyline_nodes[0];
+static void pack_debug(int max) {
+    for (int i = 0; i < max; ++i) {
+        struct skyline_node *node = &skyline_nodes[i];
+        printf("%snode at index %d: (x: %u, y: %u, w: %u) -> points to %d\n",
+                ((i == first_node_index) ? "[FIRST] " : ""),
+                i, node->x, node->y, node->width, node->next);
+    }
+}
+
+
+static int find_free_index() {
+    for (int i = 0; i < SKYLINE_MAX_NODES; ++i) {
+        if (skyline_nodes[i].width == 0) return i;
+    }
+
+    return -1;
+}
+
+static int insert_node(int index, int before, struct skyline_node *node) {
+    /* find a free spot */
+    int free_index = find_free_index();
+    if (free_index == -1) {
+        printf("everything full...\n");
+        return -1;
+    }
+
+    printf("inserting a new node at %d, next is %d, before is %d, data is (x: %u, y: %u, w: %u)\n",
+            free_index, index, before, node->x, node->y, node->width);
+    /* skyline_nodes[free_index] = (struct skyline_node){ best_index, best_x, best_height, width }; */
+
+    skyline_nodes[free_index] = *node;
+    skyline_nodes[free_index].next = index;
+
+    if (before != -1) {
+        skyline_nodes[before].next = free_index;
+    }
+
+    /* if this replaces the first node... */
+    if (index == first_node_index) {
+        first_node_index = free_index;
+    }
+
+    return free_index;
+}
+
+static void merge() {
+    struct skyline_node *node = &skyline_nodes[first_node_index];
 
     while (node->next != -1) {
-        struct skyline_node next = &skyline_nodes[node->next];
+        /* printf("[merge] loop, next index: %d\n", node->next); */
+        struct skyline_node *next = &skyline_nodes[node->next];
 
         if (node->y == next->y) {
             node->width += next->width;
+
+            /* erase */
+            printf("[merge] ERASING node %d\n", node->next);
             node->next   = next->next;
+            next->width  = 0;
             next         = &skyline_nodes[node->next];
         }
 
@@ -278,10 +345,43 @@ static int merge() {
     }
 }
 
-/**
- * for the node at index, tries to find a height which will
- * fit the area specified.
- */
+static void shrink(int i) {
+    if (i == -1) return;
+
+    /* printf("[shrink] starting at index: %d\n", i); */
+    struct skyline_node *prev = &skyline_nodes[i];
+    while (prev->next != -1) {
+        struct skyline_node *node = &skyline_nodes[prev->next];
+
+        if (node->x < prev->x + prev->width) {
+            /* printf("[shrink] %u < %u + %u\n", node->x, prev->x, prev->width); */
+            int shrink = prev->x + prev->width - node->x;
+
+            /* node shrunk into oblivion, remove it */
+            if (node->width - shrink <= 0) {
+                /* printf("[shrink] node shrunk into oblivion, %u < %u + %u (new width: %u, next: %d)\n", node->x, prev->x, prev->width, node->width, node->next); */
+                node->width = 0;
+                prev->next = node->next;
+            }
+            else {
+                node->x     += shrink;
+                node->width -= shrink;
+
+                /* printf("[shrink] node did not shrink into oblivion, %u < %u + %u (new width: %u)\n", node->x, prev->x, prev->width, node->width); */
+                break;
+            }
+        }
+        else {
+            /* printf("[shrink] break, %u >= %u + %u\n", node->x, prev->x, prev->width); */
+            break;
+        }
+    }
+
+    /* printf("[shrink] done shrinking\n"); */
+}
+
+/* for the node at index, tries to find a height which will
+ * fit the area specified. */
 static int fit(unsigned int index, unsigned int width, unsigned int height) {
     struct skyline_node *node = &skyline_nodes[index];
 
@@ -295,6 +395,8 @@ static int fit(unsigned int index, unsigned int width, unsigned int height) {
     }
 
     while (width_left > 0 && node->next != -1) {
+        /* TODO: should assert that the next nodes are after the
+         * first ones on the horiz. axis */
         y = MAX(y, node->y);
 
         if (y + height > CACHESIZE - PADDING) {
@@ -321,45 +423,74 @@ static int fit(unsigned int index, unsigned int width, unsigned int height) {
  * A new node is created afterwards and inserted at the position of the
  * node this area was fit in.
  */
+/* static int counter = 0; */
 static int pack(unsigned int width, unsigned int height, int *x_out, int *y_out) {
-    int index = 0;
+    /* if (++counter == 5) assert(NULL); */
+    /* if (width == 10 && height == 16) assert(NULL); */
+    printf("-> TRY TO PACK OBJECT: [%u, %u]\n", width, height);
+
+    int last_index = -1;
+    int index = first_node_index;
 
     int y;
 
-    int best_index       = -1;
-    uint16_t best_width  = UINT16_MAX;
-    uint16_t best_height = UINT16_MAX;
+    int best_index        = -1;
+    int before_best_index = -1;
+    uint16_t best_x       = UINT16_MAX;
+    uint16_t best_y       = UINT16_MAX;
+    uint16_t best_width   = UINT16_MAX;
+    uint16_t best_height  = UINT16_MAX;
 
     /* loop through all nodes */
     while (index != -1) {
-        y = fit(index, with, height);
+        /* printf("LOOP THROUGH NODES: index = %d", index); */
+        /* see if this node can fit the required size */
+        y = fit(index, width, height);
+        const struct skyline_node *node = &skyline_nodes[index];
+        /* printf(", fit-y = %d, node = (x: %u, y: %u, w: %u)\n", y, node->x, node->y, node->width); */
 
         if (y >= 0) {
-            const struct skyline_node *node = &skyline_nodes[index];
-
+            /* if the current node can place the region lower than the last best
+             * node, then this node becomes the new best. If it ranks equal,
+             * then it will still be the best if the current node is less
+             * wide than the last one */
             if (y + height < best_height ||
                 (y + height == best_height && node->width < best_width)) {
                 best_index  = index;
+                before_best_index = last_index;
+
                 best_height = y + height;
                 best_width  = node->width;
+                best_x      = node->x;
                 best_y      = y;
             }
         }
 
-        index = node->next;
+        last_index = index;
+        index      = node->next;
     }
 
     if (best_index == -1) {
-        return 0;
+        return -1;
     }
 
     /* insert new split node at the best index */
-    struct skyline_node = { -1, x, y, width };
-    *x_out = best_x;
-    *y_out = best_height;
+    int new_index = insert_node(
+        best_index,
+        before_best_index,
+        &(struct skyline_node){ best_index, best_x, best_height, width }
+    );
 
+    /* it's definitely possible to combine shrink and merge
+     * and no longer iterate over all the nodes in the merge()
+     * step because most of them simply won't change... I think */
+    shrink(new_index);
     merge();
 
+    *x_out = best_x;
+    *y_out = best_y;
+
+    return 0;
 }
 
 static void packer_init() {
@@ -371,6 +502,7 @@ static void packer_init() {
     }
 
     skyline_nodes[0].width = CACHESIZE;
+    first_node_index = 0;
 }
 #endif
 
@@ -403,19 +535,24 @@ static struct glyph *lookup_glyph(struct font *font, float scale, int gid, int s
     stbtt_GetGlyphHMetrics(&font->info, gid, &advance, &lsb);
     data = stbtt_GetGlyphBitmapSubpixel(&font->info, scale, scale, shift_x, shift_y, gid, &w, &h, &x, &y);
 
-    /* Find an empty slot in the texture */
-
-    if (table_load == (MAXGLYPHS * 3) / 4) {
-        puts("glyph cache table full (load > 0.75), clearing cache");
-        clear_glyph_cache();
-        pos = lookup_table(&key);
-    }
+    /* if (!data || !w || !h) { */
+    /*     printf("error: could not render glyph %p, %d, %d\n", data, w, h); */
+    /*     return &table[pos].glyph; */
+    /* } */
 
     if (h + PADDING > CACHESIZE || w + PADDING > CACHESIZE) {
         printf("error: rendered glyph exceeds cache dimensions");
         exit(1);
     }
 
+    /* find an empty slot in the texture */
+    if (table_load == (MAXGLYPHS * 3) / 4) {
+        puts("glyph cache table full (load > 0.75), clearing cache");
+        clear_glyph_cache();
+        pos = lookup_table(&key);
+    }
+
+#ifndef SKYLINE_BL_PACKER
     if (cache_row_x + w + PADDING > CACHESIZE) {
         cache_row_y += cache_row_h + PADDING;
         cache_row_x = PADDING;
@@ -428,32 +565,47 @@ static struct glyph *lookup_glyph(struct font *font, float scale, int gid, int s
         pos = lookup_table(&key);
     }
 
-    /* Copy the bitmap into our texture */
+    int texture_x = cache_row_x;
+    int texture_y = cache_row_y;
 
+    cache_row_x += w + PADDING;
+    if (cache_row_h < h + PADDING)
+        cache_row_h = h + PADDING;
+#else
+retry:;
+    int texture_x = -1;
+    int texture_y = -1;
+    int res = pack(w, h, &texture_x, &texture_y);
+    printf("<- JUST PACKED OBJECT: [%u, %u] -> [%d, %d]\n", w, h, texture_x, texture_y);
+
+    if (res == -1) {
+        printf("could not cache texture, resetting\n");
+        clear_glyph_cache();
+        printf("GLYPHS SHOULD BE CLEARED\n");
+        goto retry;
+    }
+#endif
+
+    ++table_load;
+
+    /* copy the bitmap into our texture */
     memcpy(&table[pos].key, &key, sizeof(struct key));
     table[pos].glyph.w = w;
     table[pos].glyph.h = h;
     table[pos].glyph.x = x;
     table[pos].glyph.y = y;
-    table[pos].glyph.s = cache_row_x;
-    table[pos].glyph.t = cache_row_y;
+    table[pos].glyph.s = texture_x;
+    table[pos].glyph.t = texture_y;
     table[pos].glyph.advance = advance * scale;
-
-    ++table_load;
 
     if (data && w && h) {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, w);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, cache_row_x, cache_row_y, w, h, GL_RED, GL_UNSIGNED_BYTE, data);
-        // glTexSubImage2D(GL_TEXTURE_2D, 0, cache_row_x, cache_row_y, w, h, GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, texture_x, texture_y, w, h, GL_RED, GL_UNSIGNED_BYTE, data);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     }
 
     free(data);
-
-    cache_row_x += w + PADDING;
-    if (cache_row_h < h + PADDING)
-        cache_row_h = h + PADDING;
 
     return &table[pos].glyph;
 }
@@ -537,6 +689,12 @@ void text_set_color(float r, float g, float b, float a) {
 void text_set_font(struct font *font, float size) {
     text_font = font;
     text_scale = stbtt_ScaleForPixelHeight(&font->info, size);
+}
+
+void text_init() {
+#ifdef SKYLINE_BL_PACKER
+    packer_init();
+#endif
 }
 
 void text_begin(mat4 clip_from_view, mat4 view_from_world, int alt) {

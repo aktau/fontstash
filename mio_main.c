@@ -175,6 +175,8 @@ int main() {
 
     glfwSetKeyCallback(window, key_callback);
 
+    text_init();
+
     while (!glfwWindowShouldClose(window)) {
         float sx = 100, sy = 100, dx, dy, t, lh = 0;
 
