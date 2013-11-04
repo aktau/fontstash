@@ -301,12 +301,12 @@ static int insert_node(int index, int before, struct skyline_node *node) {
     /* find a free spot */
     int free_index = find_free_index();
     if (free_index == -1) {
-        printf("everything full...\n");
+        printf("[ERROR] everything is full\n");
         return -1;
     }
 
-    printf("inserting a new node at %d, next is %d, before is %d, data is (x: %u, y: %u, w: %u)\n",
-            free_index, index, before, node->x, node->y, node->width);
+    /* printf("inserting a new node at %d, next is %d, before is %d, data is (x: %u, y: %u, w: %u)\n", */
+    /*         free_index, index, before, node->x, node->y, node->width); */
     /* skyline_nodes[free_index] = (struct skyline_node){ best_index, best_x, best_height, width }; */
 
     skyline_nodes[free_index] = *node;
@@ -324,25 +324,34 @@ static int insert_node(int index, int before, struct skyline_node *node) {
     return free_index;
 }
 
-static void merge() {
-    struct skyline_node *node = &skyline_nodes[first_node_index];
+/* param i is the index from where to begin scanning, should be one
+ * index before the newly inserted node */
+static void merge(int i) {
+    if (i == -1) return;
 
-    while (node->next != -1) {
-        /* printf("[merge] loop, next index: %d\n", node->next); */
+    struct skyline_node *node = &skyline_nodes[i];
+
+    int counter = 2;
+    do {
         struct skyline_node *next = &skyline_nodes[node->next];
 
         if (node->y == next->y) {
+            /* if two adjacent nodes are at an equal height, suck the width
+             * out of the last node and add it to the first. Then delete the
+             * last node. */
             node->width += next->width;
 
-            /* erase */
-            printf("[merge] ERASING node %d\n", node->next);
             node->next   = next->next;
             next->width  = 0;
-            next         = &skyline_nodes[node->next];
-        }
 
-        node = next;
-    }
+            ++counter;
+        }
+        else {
+            if (node->next == -1) break;
+
+            node = &skyline_nodes[node->next];
+        }
+    } while (--counter);
 }
 
 static void shrink(int i) {
@@ -359,7 +368,7 @@ static void shrink(int i) {
 
             /* node shrunk into oblivion, remove it */
             if (node->width - shrink <= 0) {
-                /* printf("[shrink] node shrunk into oblivion, %u < %u + %u (new width: %u, next: %d)\n", node->x, prev->x, prev->width, node->width, node->next); */
+                /* printf("[shrink] node %d shrunk into oblivion, %u < %u + %u (new width: %u, next: %d)\n", prev->next, node->x, prev->x, prev->width, node->width, node->next); */
                 node->width = 0;
                 prev->next = node->next;
             }
@@ -426,8 +435,8 @@ static int fit(unsigned int index, unsigned int width, unsigned int height) {
 /* static int counter = 0; */
 static int pack(unsigned int width, unsigned int height, int *x_out, int *y_out) {
     /* if (++counter == 5) assert(NULL); */
-    /* if (width == 10 && height == 16) assert(NULL); */
-    printf("-> TRY TO PACK OBJECT: [%u, %u]\n", width, height);
+    /* if (width == 3 && height == 4) assert(NULL); */
+    /* printf("-> TRY TO PACK OBJECT: [%u, %u]\n", width, height); */
 
     int last_index = -1;
     int index = first_node_index;
@@ -471,7 +480,7 @@ static int pack(unsigned int width, unsigned int height, int *x_out, int *y_out)
     }
 
     if (best_index == -1) {
-        return -1;
+        return 0;
     }
 
     /* insert new split node at the best index */
@@ -481,16 +490,13 @@ static int pack(unsigned int width, unsigned int height, int *x_out, int *y_out)
         &(struct skyline_node){ best_index, best_x, best_height, width }
     );
 
-    /* it's definitely possible to combine shrink and merge
-     * and no longer iterate over all the nodes in the merge()
-     * step because most of them simply won't change... I think */
     shrink(new_index);
-    merge();
+    merge(before_best_index);
 
     *x_out = best_x;
     *y_out = best_y;
 
-    return 0;
+    return 1;
 }
 
 static void packer_init() {
@@ -576,12 +582,11 @@ retry:;
     int texture_x = -1;
     int texture_y = -1;
     int res = pack(w, h, &texture_x, &texture_y);
-    printf("<- JUST PACKED OBJECT: [%u, %u] -> [%d, %d]\n", w, h, texture_x, texture_y);
+    /* printf("<- JUST PACKED OBJECT: [%u, %u] -> [%d, %d]\n", w, h, texture_x, texture_y); */
 
     if (res == -1) {
         printf("could not cache texture, resetting\n");
         clear_glyph_cache();
-        printf("GLYPHS SHOULD BE CLEARED\n");
         goto retry;
     }
 #endif
