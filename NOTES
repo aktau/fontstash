@@ -1,0 +1,9 @@
+Androids font renderer, very informative:
+https://medium.com/@romainguy/androids-font-renderer-c368bbde87d9
+
+A possibly faster approach to OpenGL rasterization of 2D Web content:
+http://blogs.igalia.com/elima/2014/07/04/a-possibly-faster-approach-to-opengl-rasterization-of-2d-web-content/
+
+GLyphy: SDF fields, not rendered to a texture but as pure vectors (no
+precision loss):
+https://code.google.com/p/glyphy/
